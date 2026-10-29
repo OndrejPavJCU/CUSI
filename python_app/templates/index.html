@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="cs" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VisionGuard AI - Monitorovací Systém</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#22c55e',
+              600: '#16a34a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-full flex flex-col font-sans antialiased text-slate-200 bg-slate-950">
+
+  <!-- Horní lišta / Top Bar Contract -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-6">
+      <!-- Zone 1: Brand -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-sm">
+          VG
+        </div>
+        <div>
+          <span class="text-base font-bold tracking-tight text-white whitespace-nowrap">VisionGuard AI</span>
+          <span class="text-xs text-slate-400 font-mono hidden sm:inline ml-2">· Zabezpečený Kamerový Dohled</span>
+        </div>
+      </div>
+
+      <!-- Zone 2: Navigation Links -->
+      <nav class="hidden md:flex items-center gap-6 text-xs font-medium text-slate-300">
+        <a href="#live-preview" class="hover:text-emerald-400 transition-colors">Živý Stream</a>
+        <a href="#overview" class="hover:text-emerald-400 transition-colors">Přehled</a>
+        <a href="#vehicles" class="hover:text-emerald-400 transition-colors">Deník SPZ</a>
+        <a href="#persons" class="hover:text-emerald-400 transition-colors">Galerie Branka</a>
+      </nav>
+
+      <!-- Zone 3: Actions & User Info -->
+      <div class="flex items-center gap-3">
+        <button
+          onclick="triggerRetentionCleanup()"
+          title="Smazat soubory starší než {{ config.RETENTION_DAYS }} dní"
+          class="hidden sm:inline-flex px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white rounded-lg transition-colors border border-slate-700">
+          🧹 Retence dat ({{ config.RETENTION_DAYS }}d)
+        </button>
+        <span class="px-2.5 py-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 rounded-md">
+          ● {{ username }}
+        </span>
+        <a href="/" class="px-3 py-1.5 text-xs font-medium text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700">
+          Obnovit
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Sekce: Živý MJPEG Stream s nízkou latencí -->
+    <section id="live-preview" class="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Živý MJPEG video stream z kamery</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Thread-safe fronta s dropováním snímků pro prevenci zpoždění (Zero Lag Buffer)</p>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">TCP RTSP</span>
+          <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono">FrameSkip: {{ config.FRAME_SKIP }}</span>
+        </div>
+      </div>
+
+      <div class="relative aspect-video max-w-4xl mx-auto rounded-lg overflow-hidden border border-slate-800 bg-black flex items-center justify-center">
+        <img
+          id="liveStreamImg"
+          src="/api/stream/live"
+          alt="Živý náhled kamery"
+          class="w-full h-full object-contain"
+          onerror="handleStreamError(this)"
+        />
+        <div id="streamPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 text-slate-400 space-y-2 p-6 hidden text-center">
+          <div class="w-10 h-10 rounded-full border-2 border-emerald-500/20 border-t-emerald-500 animate-spin"></div>
+          <div class="text-sm font-medium text-slate-300">Čekám na signál z RTSP kamery...</div>
+          <div class="text-xs text-slate-500 max-w-md">Ujistěte se, že běží hlavní detekční skript (<code>python main.py</code>) a kamera je dostupná na zadané adrese.</div>
+          <button onclick="retryStream()" class="mt-2 px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white rounded-md border border-slate-700">
+            Znovu načíst stream
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Sekce: Statistiky (KPI Strip) -->
+    <section id="overview" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div class="text-xs text-slate-400 font-medium">Vozidla dnes</div>
+        <div class="text-2xl font-bold text-white mt-1 font-mono tabular-nums">{{ stats.vehicles_today }}</div>
+      </div>
+      <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div class="text-xs text-slate-400 font-medium">Osoby u branky dnes</div>
+        <div class="text-2xl font-bold text-emerald-400 mt-1 font-mono tabular-nums">{{ stats.persons_today }}</div>
+      </div>
+      <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div class="text-xs text-slate-400 font-medium">Celkem SPZ v databázi</div>
+        <div class="text-2xl font-bold text-slate-300 mt-1 font-mono tabular-nums">{{ stats.total_vehicles }}</div>
+      </div>
+      <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800">
+        <div class="text-xs text-slate-400 font-medium">Celkem zachycených osob</div>
+        <div class="text-2xl font-bold text-slate-300 mt-1 font-mono tabular-nums">{{ stats.total_persons }}</div>
+      </div>
+    </section>
+
+    <!-- Sekce: Detekce Vozidel & ANPR -->
+    <section id="vehicles" class="rounded-xl bg-slate-900/60 border border-slate-800 overflow-hidden">
+      <div class="p-5 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold text-white">Průjezdy vozidel & Rozpoznané SPZ (ROAD_ZONE)</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Automatické čtení SPZ pomocí OCR s debounce cooldownem {{ config.ANPR_COOLDOWN_SEC }}s</p>
+        </div>
+
+        <!-- Filtrovací formulář -->
+        <form method="get" class="flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            name="plate"
+            value="{{ filter_plate }}"
+            placeholder="Hledat SPZ (např. 1AB...)"
+            class="px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+          >
+          <input
+            type="date"
+            name="date_from"
+            value="{{ filter_date_from }}"
+            class="px-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-emerald-500"
+          >
+          <button type="submit" class="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors">
+            Filtrovat
+          </button>
+          {% if filter_plate or filter_date_from %}
+          <a href="/" class="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">Zrušit</a>
+          {% endif %}
+        </form>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/60 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+            <tr>
+              <th class="px-5 py-3 font-medium">Čas průjezdu</th>
+              <th class="px-5 py-3 font-medium">Registrační značka (SPZ)</th>
+              <th class="px-5 py-3 font-medium">Typ</th>
+              <th class="px-5 py-3 font-medium">Spolehlivost</th>
+              <th class="px-5 py-3 font-medium">Fotografie</th>
+              <th class="px-5 py-3 font-medium text-right">Akce</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60">
+            {% for item in vehicles %}
+            <tr id="vehicle-row-{{ item.id }}" class="hover:bg-slate-800/30 transition-colors">
+              <td class="px-5 py-3 text-slate-300 font-mono tabular-nums">{{ item.timestamp }}</td>
+              <td class="px-5 py-3">
+                <span class="inline-block px-2.5 py-1 bg-white text-slate-900 font-bold font-mono text-sm tracking-wider rounded border border-slate-300 shadow-sm">
+                  {{ item.plate_text }}
+                </span>
+              </td>
+              <td class="px-5 py-3 text-slate-400 capitalize">{{ item.vehicle_type }}</td>
+              <td class="px-5 py-3 font-mono tabular-nums text-slate-300">{{ "%.1f"|format(item.confidence * 100) }} %</td>
+              <td class="px-5 py-3">
+                <img
+                  src="{{ item.web_image_url }}"
+                  alt="Výřez {{ item.plate_text }}"
+                  onclick="openModal(this.src)"
+                  class="w-16 h-10 object-cover rounded border border-slate-700 hover:opacity-80 cursor-pointer"
+                  onerror="this.style.display='none'"
+                >
+              </td>
+              <td class="px-5 py-3 text-right">
+                <button
+                  onclick="deleteVehicle({{ item.id }})"
+                  class="text-red-400 hover:text-red-300 text-xs transition-colors">
+                  Smazat
+                </button>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="px-5 py-8 text-center text-slate-500">
+                Zatím nebyly zaznamenány žádné průjezdy odpovídající zadaným filtrům.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Sekce: Galerie Osob u Branky (GATE_ZONE) -->
+    <section id="persons" class="rounded-xl bg-slate-900/60 border border-slate-800 p-5 space-y-4">
+      <div>
+        <h2 class="text-lg font-semibold text-white">Galerie osob zachycených u branky (GATE_ZONE)</h2>
+        <p class="text-xs text-slate-400">Automatický ořez s dynamickým okrajem (padding: {{ config.PERSON_CROP_PADDING_PX }}px) a odesláním na Telegram</p>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        {% for item in persons %}
+        <div id="person-card-{{ item.id }}" class="group relative rounded-lg border border-slate-800 bg-slate-950 overflow-hidden flex flex-col">
+          <div class="aspect-[3/4] bg-slate-900 overflow-hidden cursor-pointer" onclick="openModal('{{ item.web_image_url }}')">
+            <img
+              src="{{ item.web_image_url }}"
+              alt="Osoba u branky"
+              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+              onerror="this.parentElement.innerHTML='<div class=\'w-full h-full flex items-center justify-center text-slate-600 text-xs\'>Chybí foto</div>'"
+            >
+          </div>
+          <div class="p-2.5 text-xs flex flex-col justify-between flex-1">
+            <div class="font-mono text-slate-300 tabular-nums text-[11px]">{{ item.timestamp }}</div>
+            <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-800 text-slate-400">
+              <span class="font-mono tabular-nums text-emerald-400">{{ "%.0f"|format(item.confidence * 100) }} %</span>
+              <button
+                onclick="deletePerson({{ item.id }})"
+                class="text-red-400 hover:text-red-300 text-[11px]">
+                Smazat
+              </button>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="col-span-full py-8 text-center text-slate-500 text-xs">
+          Zatím nebyly zachyceny žádné osoby u branky.
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal pro detailní zvětšení fotografie -->
+  <div id="imageModal" class="fixed inset-0 z-50 bg-black/90 hidden items-center justify-center p-4" onclick="closeModal()">
+    <div class="relative max-w-4xl max-h-[90vh]">
+      <img id="modalImg" src="" alt="Detail záznamu" class="max-w-full max-h-[85vh] object-contain rounded-lg border border-slate-700">
+      <button onclick="closeModal()" class="absolute top-2 right-2 text-white bg-slate-800/80 hover:bg-slate-700 p-2 rounded-full">
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function openModal(src) {
+      document.getElementById('modalImg').src = src;
+      document.getElementById('imageModal').classList.remove('hidden');
+      document.getElementById('imageModal').classList.add('flex');
+    }
+    function closeModal() {
+      document.getElementById('imageModal').classList.add('hidden');
+      document.getElementById('imageModal').classList.remove('flex');
+    }
+
+    function handleStreamError(img) {
+      document.getElementById('streamPlaceholder').classList.remove('hidden');
+    }
+
+    function retryStream() {
+      const img = document.getElementById('liveStreamImg');
+      document.getElementById('streamPlaceholder').classList.add('hidden');
+      img.src = '/api/stream/live?t=' + Date.now();
+    }
+
+    async function triggerRetentionCleanup() {
+      if (!confirm('Opravdu chcete spustit manuální retenci a smazat data starší než {{ config.RETENTION_DAYS }} dní?')) return;
+      try {
+        const res = await fetch('/api/maintenance/cleanup', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`Úklid dokončen! Smazáno: ${data.stats.deleted_vehicles} vozidel, ${data.stats.deleted_persons} osob, ${data.stats.deleted_files} souborů.`);
+          window.location.reload();
+        } else {
+          alert('Chyba při spouštění retence.');
+        }
+      } catch (err) {
+        alert('Chyba komunikace se serverem.');
+      }
+    }
+
+    async function deleteVehicle(id) {
+      if (!confirm('Opravdu chcete smazat tento záznam vozidla včetně fotografie z disku?')) return;
+      try {
+        const res = await fetch(`/api/vehicles/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          const row = document.getElementById(`vehicle-row-${id}`);
+          if (row) row.remove();
+        } else {
+          alert('Chyba při mazání.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function deletePerson(id) {
+      if (!confirm('Opravdu chcete smazat tuto fotografii osoby včetně souboru z disku?')) return;
+      try {
+        const res = await fetch(`/api/persons/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          const card = document.getElementById(`person-card-${id}`);
+          if (card) card.remove();
+        } else {
+          alert('Chyba při mazání.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  </script>
+</body>
+</html>

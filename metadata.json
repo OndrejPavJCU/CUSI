@@ -1,0 +1,8 @@
+{
+  "name": "Remix VisionGuard AI - RTSP ANPR \u0026 Person Detection Hub",
+  "description": "Produkční Python systém pro inteligentní monitorování kamer (OpenCV, YOLO, ANPR, detekce osob, Telegram notifikace a webový dashboard).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
